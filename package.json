@@ -10,7 +10,7 @@
     "check": "biome check",
     "check:ci": "biome ci",
     "check:tsc": "tsc --noEmit",
-    "prepare": "husky"
+    "prepare": "husky || true"
   },
   "lint-staged": {
     "*.{js,jsx,ts,tsx}": [
@@ -18,7 +18,7 @@
     ]
   },
   "dependencies": {
-    "next": "16.0.3",
+    "next": "16.1.1",
     "react": "19.2.0",
     "react-dom": "19.2.0"
   },
@@ -29,10 +29,14 @@
     "@types/react": "^19",
     "@types/react-dom": "^19",
     "eslint": "^9",
-    "eslint-config-next": "16.0.3",
+    "eslint-config-next": "16.1.1",
     "husky": "^9.1.7",
     "lint-staged": "^16.1.2",
     "tailwindcss": "^4",
     "typescript": "^5"
+  },
+  "engines": {
+    "node": ">=20.0.0",
+    "pnpm": ">=10.0.0"
   }
 }
