@@ -2,7 +2,7 @@
 export function getApiBaseUrl(): string {
   const raw =
     process.env.NEXT_PUBLIC_API_URL?.replace(/\/$/, "") ??
-    "http://localhost:3000";
+    "https://miraphoto-backend.fly.dev";
   return raw;
 }
 

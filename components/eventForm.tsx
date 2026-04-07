@@ -156,8 +156,10 @@ export default function EventForm() {
           <p className="mt-2 text-sm text-[#787776]">
             API: <span className="font-mono">{getApiBaseUrl()}</span>
             {" · "}
-            Set <code className="font-mono">NEXT_PUBLIC_API_URL</code> if your
-            backend runs elsewhere (e.g. when Next.js uses port 3000).
+            Override with <code className="font-mono">NEXT_PUBLIC_API_URL</code>{" "}
+            for a local backend (e.g.{" "}
+            <span className="font-mono">http://localhost:3000</span>
+            ).
           </p>
         </div>
 
