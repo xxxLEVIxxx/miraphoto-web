@@ -1,7 +1,7 @@
 "use client";
 
-import { SignInButton, UserButton, useAuth } from "@clerk/nextjs";
 import { useState } from "react";
+import { toast } from "sonner";
 import {
   type CreateEventPayload,
   createEvent,
@@ -18,9 +18,17 @@ function normalizeTime(value: string): string {
   return t;
 }
 
-export default function EventForm() {
-  const { getToken, isLoaded, isSignedIn } = useAuth();
+/** Backend expects E.164; help US users who omit +country */
+function toE164Phone(raw: string): string {
+  const t = raw.trim();
+  if (t.startsWith("+")) return t;
+  const digits = t.replace(/\D/g, "");
+  if (digits.length === 10) return `+1${digits}`;
+  if (digits.length === 11 && digits.startsWith("1")) return `+${digits}`;
+  return t;
+}
 
+export default function EventForm() {
   const [title, setTitle] = useState("");
   const [description, setDescription] = useState("");
   const [date, setDate] = useState("");
@@ -35,33 +43,26 @@ export default function EventForm() {
   const [coverFile, setCoverFile] = useState<File | null>(null);
   const [galleryFiles, setGalleryFiles] = useState<File[]>([]);
 
-  const [status, setStatus] = useState<{
-    kind: "idle" | "ok" | "err";
-    text: string;
-  }>({ kind: "idle", text: "" });
-
   const [submitBusy, setSubmitBusy] = useState(false);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    setStatus({ kind: "idle", text: "" });
-
-    if (!isLoaded) {
-      setStatus({
-        kind: "err",
-        text: "Page is still loading. Try again in a moment.",
-      });
-      return;
-    }
 
     if (isTicketed === null) {
-      setStatus({ kind: "err", text: "Choose whether the event is ticketed." });
+      toast.error("Choose whether the event is ticketed.");
       return;
     }
 
     const st = normalizeTime(startTime);
     const et = normalizeTime(endTime);
     const stateNorm = stateCode.trim().toUpperCase();
+    const phoneE164 = toE164Phone(phoneNumber);
+    if (!/^\+[1-9]\d{1,14}$/.test(phoneE164)) {
+      toast.error(
+        "Phone must be in E.164 format (e.g. +13478188801 for US numbers).",
+      );
+      return;
+    }
 
     const payload: CreateEventPayload = {
       title: title.trim(),
@@ -74,25 +75,21 @@ export default function EventForm() {
         state: stateNorm,
       },
       emailAddress: emailAddress.trim().toLowerCase(),
-      phoneNumber: phoneNumber.trim(),
+      phoneNumber: phoneE164,
       isTicketed: isTicketed === "yes",
     };
 
     if (payload.isTicketed) {
       const n = Number.parseFloat(ticketPrice);
       if (Number.isNaN(n) || n <= 0) {
-        setStatus({
-          kind: "err",
-          text: "Enter a valid ticket price for a ticketed event.",
-        });
+        toast.error("Enter a valid ticket price for a ticketed event.");
         return;
       }
       payload.ticketPrice = n;
     }
 
-    const token = isSignedIn ? await getToken() : null;
-
     setSubmitBusy(true);
+    const loadingId = toast.loading("Creating event…");
     try {
       await createEvent(
         payload,
@@ -100,17 +97,19 @@ export default function EventForm() {
           cover: coverFile,
           gallery: galleryFiles.length ? galleryFiles : undefined,
         },
-        token ?? undefined,
+        undefined,
       );
-      setStatus({
-        kind: "ok",
-        text: "Event created successfully.",
+      toast.dismiss(loadingId);
+      toast.success("Event created successfully.", {
+        description: "Your event is saved on the server.",
+        duration: 6000,
       });
     } catch (err) {
-      setStatus({
-        kind: "err",
-        text: err instanceof Error ? err.message : "Could not create event",
-      });
+      toast.dismiss(loadingId);
+      toast.error(
+        err instanceof Error ? err.message : "Could not create the event.",
+        { duration: 8000 },
+      );
     } finally {
       setSubmitBusy(false);
     }
@@ -134,57 +133,15 @@ export default function EventForm() {
             <span className="font-mono">http://localhost:3000</span>
             ).
           </p>
-        </div>
-
-        <section className="mb-8 bg-white rounded-xl p-6 shadow-lg">
-          <h2 className="text-lg font-semibold text-[#2D384C] mb-3">
-            Optional sign-in
-          </h2>
-          <p className="text-sm text-[#787776] mb-4">
-            Anyone can create an event. If you sign in with Clerk, the event is
-            linked to your Miraphoto account (same session as the mobile app).
-            Otherwise the event is stored with your contact details only.
+          <p className="mt-3 text-sm text-[#2D384C]">
+            No account required — submit the form to create an event.
           </p>
-          {!isLoaded ? (
-            <p className="text-sm text-[#787776]">Loading…</p>
-          ) : isSignedIn ? (
-            <div className="flex flex-wrap items-center gap-3">
-              <UserButton />
-              <span className="text-sm text-[#2D384C]">
-                Signed in with Clerk
-              </span>
-            </div>
-          ) : (
-            <SignInButton mode="modal">
-              <button
-                type="button"
-                className="rounded-full bg-[#2D384C] text-[#FDBD4E] text-sm font-medium px-6 py-2 hover:bg-[#1f2838]"
-              >
-                Sign in
-              </button>
-            </SignInButton>
-          )}
-        </section>
+        </div>
 
         <form
           onSubmit={handleSubmit}
           className="bg-white rounded-xl p-6 shadow-lg"
         >
-          {status.text ? (
-            <div
-              className={`mb-4 rounded-lg px-3 py-2 text-sm ${
-                status.kind === "ok"
-                  ? "bg-green-50 text-green-900"
-                  : status.kind === "err"
-                    ? "bg-red-50 text-red-900"
-                    : ""
-              }`}
-              role={status.kind === "err" ? "alert" : "status"}
-            >
-              {status.text}
-            </div>
-          ) : null}
-
           <div className="mb-4">
             <label
               htmlFor="title"
@@ -318,13 +275,13 @@ export default function EventForm() {
               htmlFor="phoneNumber"
               className="block text-sm font-medium text-[#2D384C] mb-1"
             >
-              Phone (E.164)
+              Phone (E.164, e.g. +13478188801)
             </label>
             <input
               id="phoneNumber"
               type="tel"
               className={inputClass}
-              placeholder="+12125551234"
+              placeholder="+13478188801"
               value={phoneNumber}
               onChange={(e) => setPhoneNumber(e.target.value)}
               required
@@ -487,7 +444,7 @@ export default function EventForm() {
 
           <button
             type="submit"
-            disabled={submitBusy || !isLoaded}
+            disabled={submitBusy}
             className="w-40 h-9 mx-auto block rounded-full bg-[#2D384C] text-[#FDBD4E] text-sm font-medium hover:bg-[#1f2838] transition-colors disabled:opacity-60"
           >
             {submitBusy ? "Submitting…" : "Submit"}
