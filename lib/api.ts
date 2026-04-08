@@ -17,7 +17,43 @@ export type CreateEventPayload = {
   isTicketed: boolean;
   ticketPrice?: number;
   description: string;
+  /** Optional bound photographer (from public search) */
+  photographerId?: string;
 };
+
+/** Public search result — `GET /api/photographers/public/search?q=` */
+export type PublicPhotographerSearchHit = {
+  photographerId: string;
+  firstName: string;
+  lastName: string;
+  displayedName: string;
+  profileImageUrl: string | null;
+  bio: string | null;
+};
+
+export async function searchPhotographersPublic(
+  q: string,
+): Promise<PublicPhotographerSearchHit[]> {
+  const base = getApiBaseUrl();
+  const trimmed = q.trim();
+  if (!trimmed) return [];
+  const params = new URLSearchParams({ q: trimmed });
+  const res = await fetch(
+    `${base}/api/photographers/public/search?${params.toString()}`,
+    { method: "GET", headers: { Accept: "application/json" } },
+  );
+  const data = (await res.json()) as
+    | PublicPhotographerSearchHit[]
+    | { message?: string };
+  if (!res.ok) {
+    const msg =
+      data && typeof data === "object" && "message" in data
+        ? (data as { message?: string }).message
+        : undefined;
+    throw new Error(msg ?? `Search failed (${res.status})`);
+  }
+  return Array.isArray(data) ? data : [];
+}
 
 export type CreateEventFiles = {
   cover?: File | null;
@@ -48,6 +84,9 @@ export async function createEvent(
     fd.append("ticketPrice", String(body.ticketPrice));
   }
   fd.append("description", body.description);
+  if (body.photographerId?.trim()) {
+    fd.append("photographerId", body.photographerId.trim());
+  }
 
   if (files.cover) {
     fd.append("cover", files.cover);

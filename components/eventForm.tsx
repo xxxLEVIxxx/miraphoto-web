@@ -1,11 +1,13 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { toast } from "sonner";
 import {
   type CreateEventPayload,
   createEvent,
   getApiBaseUrl,
+  type PublicPhotographerSearchHit,
+  searchPhotographersPublic,
 } from "../lib/api";
 
 const IMAGE_ACCEPT = "image/jpeg,image/jpg,image/png,image/webp";
@@ -43,7 +45,48 @@ export default function EventForm() {
   const [coverFile, setCoverFile] = useState<File | null>(null);
   const [galleryFiles, setGalleryFiles] = useState<File[]>([]);
 
+  const [photographerSearchText, setPhotographerSearchText] = useState("");
+  const [debouncedPhotographerQuery, setDebouncedPhotographerQuery] =
+    useState("");
+  const [photographerResults, setPhotographerResults] = useState<
+    PublicPhotographerSearchHit[]
+  >([]);
+  const [photographerSearchLoading, setPhotographerSearchLoading] =
+    useState(false);
+  const [selectedPhotographer, setSelectedPhotographer] =
+    useState<PublicPhotographerSearchHit | null>(null);
+
   const [submitBusy, setSubmitBusy] = useState(false);
+
+  useEffect(() => {
+    const id = setTimeout(() => {
+      setDebouncedPhotographerQuery(photographerSearchText.trim());
+    }, 400);
+    return () => clearTimeout(id);
+  }, [photographerSearchText]);
+
+  useEffect(() => {
+    if (debouncedPhotographerQuery.length < 2) {
+      setPhotographerResults([]);
+      setPhotographerSearchLoading(false);
+      return;
+    }
+    let cancelled = false;
+    setPhotographerSearchLoading(true);
+    void searchPhotographersPublic(debouncedPhotographerQuery)
+      .then((hits) => {
+        if (!cancelled) setPhotographerResults(hits);
+      })
+      .catch(() => {
+        if (!cancelled) setPhotographerResults([]);
+      })
+      .finally(() => {
+        if (!cancelled) setPhotographerSearchLoading(false);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [debouncedPhotographerQuery]);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -78,6 +121,10 @@ export default function EventForm() {
       phoneNumber: phoneE164,
       isTicketed: isTicketed === "yes",
     };
+
+    if (selectedPhotographer) {
+      payload.photographerId = selectedPhotographer.photographerId;
+    }
 
     if (payload.isTicketed) {
       const n = Number.parseFloat(ticketPrice);
@@ -251,6 +298,80 @@ export default function EventForm() {
                 required
               />
             </div>
+          </div>
+
+          <div className="mb-4">
+            <label
+              htmlFor="photographerSearch"
+              className="block text-sm font-medium text-[#2D384C] mb-1"
+            >
+              Photographer (optional)
+            </label>
+            <p className="text-xs text-[#787776] mb-1">
+              Search by name — results load after you pause typing.
+            </p>
+            <input
+              id="photographerSearch"
+              type="text"
+              className={inputClass}
+              placeholder="Type at least 2 characters"
+              value={photographerSearchText}
+              onChange={(e) => setPhotographerSearchText(e.target.value)}
+              autoComplete="off"
+            />
+            {photographerSearchLoading ? (
+              <p className="mt-1 text-xs text-[#787776]">Searching…</p>
+            ) : null}
+            {selectedPhotographer ? (
+              <div className="mt-2 flex items-center justify-between gap-2 rounded border border-[#8691A8] px-2 py-1.5 text-sm text-[#2D384C]">
+                <span>
+                  {[
+                    selectedPhotographer.firstName,
+                    selectedPhotographer.lastName,
+                  ]
+                    .filter(Boolean)
+                    .join(" ")}{" "}
+                  <span className="text-[#787776]">
+                    (@{selectedPhotographer.displayedName})
+                  </span>
+                </span>
+                <button
+                  type="button"
+                  className="text-[#2D384C] underline text-xs shrink-0"
+                  onClick={() => {
+                    setSelectedPhotographer(null);
+                    setPhotographerSearchText("");
+                    setPhotographerResults([]);
+                  }}
+                >
+                  Clear
+                </button>
+              </div>
+            ) : null}
+            {!selectedPhotographer &&
+            photographerResults.length > 0 &&
+            debouncedPhotographerQuery.length >= 2 ? (
+              <div className="mt-1 max-h-40 overflow-y-auto rounded border border-[#8691A8] bg-white shadow-sm">
+                {photographerResults.map((p) => (
+                  <div key={p.photographerId}>
+                    <button
+                      type="button"
+                      className="w-full text-left px-2 py-2 text-sm text-[#2D384C] hover:bg-[#f3f4f6]"
+                      onClick={() => {
+                        setSelectedPhotographer(p);
+                        setPhotographerResults([]);
+                        setPhotographerSearchText(
+                          `${p.firstName} ${p.lastName}`.trim(),
+                        );
+                      }}
+                    >
+                      {p.firstName} {p.lastName}{" "}
+                      <span className="text-[#787776]">@{p.displayedName}</span>
+                    </button>
+                  </div>
+                ))}
+              </div>
+            ) : null}
           </div>
 
           <div className="mb-4">
