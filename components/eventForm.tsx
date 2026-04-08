@@ -397,7 +397,7 @@ export default function EventForm() {
               onChange={(e) => setCoverFile(e.target.files?.[0] ?? null)}
             />
             <p className="mt-1 text-xs text-[#787776]">
-              JPEG, PNG, or WebP · up to 5MB
+              JPEG, PNG, or WebP · up to 20MB
             </p>
           </div>
 
@@ -419,7 +419,7 @@ export default function EventForm() {
               }
             />
             <p className="mt-1 text-xs text-[#787776]">
-              Multiple images for detail / carousel · up to 5MB each
+              Multiple images for detail / carousel · up to 20MB each
             </p>
           </div>
 
