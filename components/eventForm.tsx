@@ -1,14 +1,14 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { SignInButton, UserButton, useAuth } from "@clerk/nextjs";
+import { useState } from "react";
 import {
   type CreateEventPayload,
   createEvent,
   getApiBaseUrl,
-  loginPhotographer,
 } from "../lib/api";
 
-const TOKEN_KEY = "miraphoto_access_token";
+const IMAGE_ACCEPT = "image/jpeg,image/jpg,image/png,image/webp";
 
 function normalizeTime(value: string): string {
   const t = value.trim();
@@ -19,10 +19,7 @@ function normalizeTime(value: string): string {
 }
 
 export default function EventForm() {
-  const [accessToken, setAccessToken] = useState<string | null>(null);
-  const [loginEmail, setLoginEmail] = useState("");
-  const [loginPassword, setLoginPassword] = useState("");
-  const [loginBusy, setLoginBusy] = useState(false);
+  const { getToken, isLoaded, isSignedIn } = useAuth();
 
   const [title, setTitle] = useState("");
   const [description, setDescription] = useState("");
@@ -35,6 +32,8 @@ export default function EventForm() {
   const [phoneNumber, setPhoneNumber] = useState("");
   const [isTicketed, setIsTicketed] = useState<"yes" | "no" | null>(null);
   const [ticketPrice, setTicketPrice] = useState("");
+  const [coverFile, setCoverFile] = useState<File | null>(null);
+  const [galleryFiles, setGalleryFiles] = useState<File[]>([]);
 
   const [status, setStatus] = useState<{
     kind: "idle" | "ok" | "err";
@@ -43,49 +42,14 @@ export default function EventForm() {
 
   const [submitBusy, setSubmitBusy] = useState(false);
 
-  useEffect(() => {
-    const t = localStorage.getItem(TOKEN_KEY);
-    if (t) {
-      setAccessToken(t);
-    }
-  }, []);
-
-  const handleSignIn = async (e: React.FormEvent) => {
-    e.preventDefault();
-    setStatus({ kind: "idle", text: "" });
-    setLoginBusy(true);
-    try {
-      const token = await loginPhotographer(loginEmail, loginPassword);
-      localStorage.setItem(TOKEN_KEY, token);
-      setAccessToken(token);
-      setStatus({
-        kind: "ok",
-        text: "Signed in. You can create an event below.",
-      });
-    } catch (err) {
-      setStatus({
-        kind: "err",
-        text: err instanceof Error ? err.message : "Sign-in failed",
-      });
-    } finally {
-      setLoginBusy(false);
-    }
-  };
-
-  const handleSignOut = () => {
-    localStorage.removeItem(TOKEN_KEY);
-    setAccessToken(null);
-    setStatus({ kind: "idle", text: "" });
-  };
-
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setStatus({ kind: "idle", text: "" });
 
-    if (!accessToken) {
+    if (!isLoaded) {
       setStatus({
         kind: "err",
-        text: "Sign in with a photographer account first.",
+        text: "Page is still loading. Try again in a moment.",
       });
       return;
     }
@@ -126,9 +90,18 @@ export default function EventForm() {
       payload.ticketPrice = n;
     }
 
+    const token = isSignedIn ? await getToken() : null;
+
     setSubmitBusy(true);
     try {
-      await createEvent(accessToken, payload);
+      await createEvent(
+        payload,
+        {
+          cover: coverFile,
+          gallery: galleryFiles.length ? galleryFiles : undefined,
+        },
+        token ?? undefined,
+      );
       setStatus({
         kind: "ok",
         text: "Event created successfully.",
@@ -165,68 +138,31 @@ export default function EventForm() {
 
         <section className="mb-8 bg-white rounded-xl p-6 shadow-lg">
           <h2 className="text-lg font-semibold text-[#2D384C] mb-3">
-            Photographer sign-in
+            Optional sign-in
           </h2>
           <p className="text-sm text-[#787776] mb-4">
-            Creating events requires a JWT from{" "}
-            <span className="font-mono">POST /api/auth/login</span> as a user
-            with the photographer role.
+            Anyone can create an event. If you sign in with Clerk, the event is
+            linked to your Miraphoto account (same session as the mobile app).
+            Otherwise the event is stored with your contact details only.
           </p>
-          {accessToken ? (
+          {!isLoaded ? (
+            <p className="text-sm text-[#787776]">Loading…</p>
+          ) : isSignedIn ? (
             <div className="flex flex-wrap items-center gap-3">
-              <span className="text-sm text-[#2D384C]">Signed in</span>
-              <button
-                type="button"
-                onClick={handleSignOut}
-                className="rounded-full border border-[#8691A8] px-4 py-1.5 text-sm text-[#2D384C] hover:bg-gray-50"
-              >
-                Sign out
-              </button>
+              <UserButton />
+              <span className="text-sm text-[#2D384C]">
+                Signed in with Clerk
+              </span>
             </div>
           ) : (
-            <form onSubmit={handleSignIn} className="space-y-3 max-w-md">
-              <div>
-                <label
-                  htmlFor="loginEmail"
-                  className="block text-sm font-medium text-[#2D384C] mb-1"
-                >
-                  Email
-                </label>
-                <input
-                  id="loginEmail"
-                  type="email"
-                  autoComplete="email"
-                  className={inputClass}
-                  value={loginEmail}
-                  onChange={(e) => setLoginEmail(e.target.value)}
-                  required
-                />
-              </div>
-              <div>
-                <label
-                  htmlFor="loginPassword"
-                  className="block text-sm font-medium text-[#2D384C] mb-1"
-                >
-                  Password
-                </label>
-                <input
-                  id="loginPassword"
-                  type="password"
-                  autoComplete="current-password"
-                  className={inputClass}
-                  value={loginPassword}
-                  onChange={(e) => setLoginPassword(e.target.value)}
-                  required
-                />
-              </div>
+            <SignInButton mode="modal">
               <button
-                type="submit"
-                disabled={loginBusy}
-                className="rounded-full bg-[#2D384C] text-[#FDBD4E] text-sm font-medium px-6 py-2 hover:bg-[#1f2838] disabled:opacity-60"
+                type="button"
+                className="rounded-full bg-[#2D384C] text-[#FDBD4E] text-sm font-medium px-6 py-2 hover:bg-[#1f2838]"
               >
-                {loginBusy ? "Signing in…" : "Sign in"}
+                Sign in
               </button>
-            </form>
+            </SignInButton>
           )}
         </section>
 
@@ -489,6 +425,47 @@ export default function EventForm() {
             </div>
           ) : null}
 
+          <div className="mb-4">
+            <label
+              htmlFor="cover"
+              className="block text-sm font-medium text-[#2D384C] mb-1"
+            >
+              Cover image (card hero)
+            </label>
+            <input
+              id="cover"
+              type="file"
+              accept={IMAGE_ACCEPT}
+              className="block w-full text-sm text-[#2D384C] file:mr-3 file:rounded file:border-0 file:bg-[#2D384C] file:px-3 file:py-1 file:text-[#FDBD4E]"
+              onChange={(e) => setCoverFile(e.target.files?.[0] ?? null)}
+            />
+            <p className="mt-1 text-xs text-[#787776]">
+              JPEG, PNG, or WebP · up to 5MB
+            </p>
+          </div>
+
+          <div className="mb-6">
+            <label
+              htmlFor="gallery"
+              className="block text-sm font-medium text-[#2D384C] mb-1"
+            >
+              Gallery images (optional)
+            </label>
+            <input
+              id="gallery"
+              type="file"
+              accept={IMAGE_ACCEPT}
+              multiple
+              className="block w-full text-sm text-[#2D384C] file:mr-3 file:rounded file:border-0 file:bg-[#2D384C] file:px-3 file:py-1 file:text-[#FDBD4E]"
+              onChange={(e) =>
+                setGalleryFiles(Array.from(e.target.files ?? []))
+              }
+            />
+            <p className="mt-1 text-xs text-[#787776]">
+              Multiple images for detail / carousel · up to 5MB each
+            </p>
+          </div>
+
           <div className="mb-6">
             <label
               htmlFor="description"
@@ -510,7 +487,7 @@ export default function EventForm() {
 
           <button
             type="submit"
-            disabled={submitBusy}
+            disabled={submitBusy || !isLoaded}
             className="w-40 h-9 mx-auto block rounded-full bg-[#2D384C] text-[#FDBD4E] text-sm font-medium hover:bg-[#1f2838] transition-colors disabled:opacity-60"
           >
             {submitBusy ? "Submitting…" : "Submit"}

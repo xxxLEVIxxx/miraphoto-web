@@ -19,46 +19,56 @@ export type CreateEventPayload = {
   description: string;
 };
 
-export async function loginPhotographer(
-  email: string,
-  password: string,
-): Promise<string> {
-  const base = getApiBaseUrl();
-  const res = await fetch(`${base}/api/auth/login`, {
-    method: "POST",
-    headers: {
-      "Content-Type": "application/json",
-      Accept: "application/json",
-    },
-    body: JSON.stringify({ email, password }),
-  });
-  const data = (await res.json()) as {
-    message?: string;
-    accessToken?: string;
-  };
-  if (!res.ok) {
-    throw new Error(data.message ?? "Login failed");
-  }
-  if (!data.accessToken) {
-    throw new Error("No access token in response");
-  }
-  return data.accessToken;
-}
+export type CreateEventFiles = {
+  cover?: File | null;
+  gallery?: File[];
+};
 
+/**
+ * Public multipart create — no auth required. Optional Clerk token links the event to a user.
+ */
 export async function createEvent(
-  accessToken: string,
   body: CreateEventPayload,
+  files: CreateEventFiles = {},
+  accessToken?: string | null,
 ): Promise<unknown> {
   const base = getApiBaseUrl();
+  const fd = new FormData();
+
+  fd.append("title", body.title);
+  fd.append("date", body.date);
+  fd.append("startTime", body.startTime);
+  fd.append("endTime", body.endTime);
+  fd.append("city", body.location.city);
+  fd.append("state", body.location.state);
+  fd.append("emailAddress", body.emailAddress);
+  fd.append("phoneNumber", body.phoneNumber);
+  fd.append("isTicketed", body.isTicketed ? "true" : "false");
+  if (body.isTicketed && body.ticketPrice != null) {
+    fd.append("ticketPrice", String(body.ticketPrice));
+  }
+  fd.append("description", body.description);
+
+  if (files.cover) {
+    fd.append("cover", files.cover);
+  }
+  for (const file of files.gallery ?? []) {
+    fd.append("gallery", file);
+  }
+
+  const headers: HeadersInit = {
+    Accept: "application/json",
+  };
+  if (accessToken) {
+    headers.Authorization = `Bearer ${accessToken}`;
+  }
+
   const res = await fetch(`${base}/api/events`, {
     method: "POST",
-    headers: {
-      "Content-Type": "application/json",
-      Accept: "application/json",
-      Authorization: `Bearer ${accessToken}`,
-    },
-    body: JSON.stringify(body),
+    headers,
+    body: fd,
   });
+
   const data = (await res.json()) as { message?: string };
   if (!res.ok) {
     throw new Error(data.message ?? `Request failed (${res.status})`);
